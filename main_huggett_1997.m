@@ -36,16 +36,16 @@ vfoptions.divideandconquer = 0;
 
 % Distribution options
 simoptions=struct(); % Use default options for solving for stationary distribution
-simoptions.tolerance       = 1e-9;
+simoptions.tolerance       = 1e-8;
 simoptions.gridinterplayer = vfoptions.gridinterplayer;
 simoptions.ngridinterp     = vfoptions.ngridinterp;
 
 % Heteroagentoptions
 heteroagentoptions = struct();
 heteroagentoptions.verbose=1; % verbose means that you want it to give you feedback on what is going on
-heteroagentoptions.toleranceGEprices=1e-12; % default is 1e-4
-heteroagentoptions.toleranceGEcondns=1e-12; % default is 1e-4
-heteroagentoptions.fminalgo = 0;  % 0=fzero, 1=fminsearch, 8=lsqnonlin 
+heteroagentoptions.fminalgo = 1;  % 0=fzero, 1=fminsearch, 8=lsqnonlin 
+heteroagentoptions.toleranceGEprices=1e-4; % default is 1e-4
+heteroagentoptions.toleranceGEcondns=1e-4; % default is 1e-4
 heteroagentoptions.maxiter = 1000;
 
 % Transition
@@ -81,7 +81,6 @@ Params.K = 4.31; % Initial condition for GE capital
 
 % Create functions to be evaluated
 FnsToEvaluate.A = @(aprime,a,z) a;
-FnsToEvaluate.C = @(aprime,a,z,K,alpha,delta) f_consumption(aprime,a,z,K,alpha,delta);
 
 % Now define the functions for the General Equilibrium conditions
 GeneralEqmEqns.CapitalMarket = @(K,A) K-A; 
@@ -114,7 +113,8 @@ pol_aprime = reshape(PolicyValues_final,[n_a,n_z]);
 
 StationaryDist_final=StationaryDist_Case1(Policy_final,n_d,n_a,n_z,pi_z,simoptions);
 
-% Following line is just a check
+% Compute aggregate variables
+FnsToEvaluate.C = @(aprime,a,z,K,alpha,delta) f_consumption(aprime,a,z,K,alpha,delta);
 AggVars_final=EvalFnOnAgentDist_AggVars_Case1(StationaryDist_final, Policy_final, FnsToEvaluate, Params, [], n_d, n_a, n_z, d_grid, a_grid, z_grid,simoptions);
 
 % Check GE residual
