@@ -1,0 +1,265 @@
+% Example of computing a general eqm transition path for the model of Huggett (JME 1997).
+
+clear,clc,close all
+toolkit_path = 'C:\Users\aledi\Documents\GitHub\VFIToolkit-matlab';
+addpath(genpath(toolkit_path))
+
+%% Grid sizes
+n_a = 1000;
+n_z = 2;
+
+%% Parameters
+Params.beta  = 0.96;
+Params.alpha = 0.36; 
+Params.delta = 0.10;
+Params.sigma = 1.5;  % Curvature of utility function
+
+% Idiosyncratic shock
+z_grid = [0.8,1.2]';
+pi_z = [0.5,0.5;
+        0.5,0.5];
+
+%% Toolkit options
+% --- Value functions options
+vfoptions=struct(); 
+vfoptions.lowmemory     = 0;
+vfoptions.verbose       = 0;
+vfoptions.tolerance     = 1e-9; % default: 10^(-9)
+vfoptions.howards       = 150; % default: 150
+vfoptions.maxhowards    = 500; %default: 500
+vfoptions.howardsgreedy = 0;
+vfoptions.gridinterplayer  = 0;
+vfoptions.ngridinterp      = 30;
+vfoptions.divideandconquer = 0;
+%vfoptions.level1n         = 51; %default: 51 if only one a variable, 21 if there
+                                 %are two
+
+% Distribution options
+simoptions=struct(); % Use default options for solving for stationary distribution
+simoptions.tolerance       = 1e-9;
+simoptions.gridinterplayer = vfoptions.gridinterplayer;
+simoptions.ngridinterp     = vfoptions.ngridinterp;
+
+% Heteroagentoptions
+heteroagentoptions = struct();
+heteroagentoptions.verbose=1; % verbose means that you want it to give you feedback on what is going on
+heteroagentoptions.toleranceGEprices=1e-12; % default is 1e-4
+heteroagentoptions.toleranceGEcondns=1e-12; % default is 1e-4
+heteroagentoptions.fminalgo = 0;  % 0=fzero, 1=fminsearch, 8=lsqnonlin 
+heteroagentoptions.maxiter = 1000;
+
+% Transition
+transpathoptions.verbose=1;
+transpathoptions.weightscheme=1;
+
+%% Grids
+% verify that E(z)=1
+z_mean = MarkovChainMoments(z_grid,pi_z);
+
+if abs(z_mean-1)>1e-12
+    warning('Average of productivity shocks is not equal to one')
+end
+
+% --- Asset holdings
+r_ss=1/Params.beta-1;
+K_ss=((r_ss+Params.delta)/Params.alpha)^(1/(Params.alpha-1)); %The steady state capital in the absence of aggregate uncertainty.
+
+% Set grid for asset holdings
+a_min = 0;
+a_max = 10*K_ss;
+a_grid = a_min + (a_max-a_min)*(linspace(0,1,n_a).^3)'; 
+
+d_grid=0; %There is no d variable
+n_d=0;
+
+%% Return function, functions to evaluate, GE conditions
+DiscountFactorParamNames={'beta'};
+ReturnFn = @(aprime,a,z,K,alpha,delta,sigma) f_ReturnFn(aprime,a,z,K,alpha,delta,sigma);
+% The first inputs must be: next period endogenous state, endogenous state, exogenous state. Followed by any parameters
+GEPriceParamNames={'K'};
+Params.K = 4.31; % Initial condition for GE capital
+
+% Create functions to be evaluated
+FnsToEvaluate.A = @(aprime,a,z) a;
+FnsToEvaluate.C = @(aprime,a,z,K,alpha,delta) f_consumption(aprime,a,z,K,alpha,delta);
+
+% Now define the functions for the General Equilibrium conditions
+GeneralEqmEqns.CapitalMarket = @(K,A) K-A; 
+
+fprintf('Grid sizes are: %d points for assets, and %d points for exogenous shock \n', n_a,n_z)
+
+%% test vfi
+%tic
+%[V_test,Policy_test]=ValueFnIter_Case1(n_d,n_a,n_z,d_grid,a_grid,z_grid, pi_z, ReturnFn, Params, DiscountFactorParamNames, [], vfoptions);
+%toc
+
+%% Compute the final steady-state
+
+% Solve for the stationary general equilbirium
+
+fprintf('Calculating price vector corresponding to the stationary general eqm \n')
+[p_eqm_final,~,GeneralEqmCondn_final]=HeteroAgentStationaryEqm_Case1(n_d, n_a, n_z, 0, pi_z, d_grid, a_grid, z_grid, ReturnFn, FnsToEvaluate, GeneralEqmEqns, Params, DiscountFactorParamNames, [], [], [], GEPriceParamNames,heteroagentoptions, simoptions, vfoptions);
+
+disp(p_eqm_final) % The equilibrium values of the GE prices
+% Note: GeneralEqmCondn_init will be essentially zero, it is the value of the general equilibrium equation
+
+% Update GE parameters based on their equilibrium values
+Params.K=p_eqm_final.K;
+
+[V_final,Policy_final]=ValueFnIter_Case1(n_d,n_a,n_z,d_grid,a_grid,z_grid, pi_z, ReturnFn, Params, DiscountFactorParamNames, [], vfoptions);
+
+% Obtain policy functions in values, from indexes
+PolicyValues_final=PolicyInd2Val_Case1(Policy_final,n_d,n_a,n_z,d_grid,a_grid,vfoptions);
+pol_aprime = reshape(PolicyValues_final,[n_a,n_z]);
+
+StationaryDist_final=StationaryDist_Case1(Policy_final,n_d,n_a,n_z,pi_z,simoptions);
+
+% Following line is just a check
+AggVars_final=EvalFnOnAgentDist_AggVars_Case1(StationaryDist_final, Policy_final, FnsToEvaluate, Params, [], n_d, n_a, n_z, d_grid, a_grid, z_grid,simoptions);
+
+% Check GE residual
+err_GE      = GeneralEqmEqns.CapitalMarket(Params.K,AggVars_final.A.Mean);
+[~,~,Y_agg] = f_prices(Params.K,Params.alpha,Params.delta);
+err_walras  = Y_agg - (AggVars_final.C.Mean + Params.delta*Params.K);
+
+disp('RESULTS STEADY STATE')
+% Huggett writes that ss K is 4.3242
+fprintf('CapitalMarket residual: %f \n',err_GE)
+fprintf('Goods market residual:  %f \n',err_walras)
+fprintf('Aggregate capital:      %f \n',p_eqm_final.K)
+
+% Replication of Figure 2 JME paper
+a_cut = find(a_grid>10, 1 );
+figure
+plot(a_grid(1:a_cut),pol_aprime(1:a_cut,1),':','linewidth',2)
+hold on
+plot(a_grid(1:a_cut),pol_aprime(1:a_cut,2),'-.','linewidth',2)
+hold on 
+plot(a_grid(1:a_cut),a_grid(1:a_cut),'k-','linewidth',2)
+legend('a(k,e_1)','a(k,e_2)','45 degree line','Location','southoutside','NumColumns', 3)
+xlabel('CAPITAL')
+ylabel('CAPITAL NEXT PERIOD')
+title('OPTIMAL DECISION RULE')
+axis tight
+
+%% Define initial distribution
+% Huggett: The initial distribution puts 20% of the agents exactly at
+%zero asset holdings and equal numbers of agents at all capital levels between
+%0 and 10.8104.
+a_cut_init = find(a_grid>10.81, 1 );
+pdf_assets = zeros(n_a,1);
+pdf_assets(1) = 0.2;
+pdf_assets(2:a_cut_init) = 0.8/numel(2:a_cut_init);
+
+StationaryDist_init = zeros(n_a,n_z);
+StationaryDist_init(:,1) = 0.5*pdf_assets;
+StationaryDist_init(:,2) = 0.5*pdf_assets; 
+StationaryDist_init = StationaryDist_init/sum(StationaryDist_init,"all");
+
+% Plot initial distribution vs stationary distribution
+figure
+plot(a_grid,sum(StationaryDist_init,2),'-.','linewidth',2)
+hold on 
+plot(a_grid,sum(StationaryDist_final,2),'k-','linewidth',2)
+legend('Initial Distribution','Stationary Distribution','Location','southoutside','NumColumns', 2)
+xlabel('CAPITAL')
+title('Compare initial vs stationary distirbutions')
+
+%% Compute transition
+
+% V_final: Value function in the steady state
+% StationaryDist_init: Initial distribution, can be arbitrary as in Huggett (1997)
+
+T = 150;
+PricePath0.K = 4.325*ones(T,1);
+% there is no change in parameters, so the line below is arbitary
+ParamPath.alpha=Params.alpha*ones(T,1); 
+TransPathGeneralEqmEqns.CapitalMarket = @(K,A) K-A;
+
+transpathoptions.GEnewprice=3;
+% Need to explain to transpathoptions how to use the GeneralEqmEqns to
+% update the general eqm transition prices (in PricePath).
+transpathoptions.GEnewprice3.howtoupdate=... % a row is: GEcondn, price, add, factor
+    {'CapitalMarket','K',0,0.1}; % CaptialMarket GE condition will be positive if K is too big, so subtract
+% Note: the update is essentially new_price=price+factor*add*GEcondn_value-factor*(1-add)*GEcondn_value
+% Notice that this adds factor*GEcondn_value when add=1 and subtracts it what add=0
+
+PricePath=TransitionPath_Case1(PricePath0, ParamPath, T, V_final, StationaryDist_init, n_d, n_a, n_z, pi_z, d_grid,a_grid,z_grid, ReturnFn, FnsToEvaluate, TransPathGeneralEqmEqns, Params, DiscountFactorParamNames, transpathoptions,vfoptions, simoptions);
+ 
+
+% %% Compute the final general equilbrium
+% Params.r=0.038; % Initial guess
+% Params.alpha=0.4;
+% 
+% % Note: if the change in parameters affected pi_z this would need to be recalculated here.
+% 
+% disp('Calculating price vector corresponding to the final stationary eqm')
+% [p_eqm_final,~,GeneralEqmCondn_final]=HeteroAgentStationaryEqm_Case1(n_d, n_a, n_z, 0, pi_z, d_grid, a_grid, z_grid, ReturnFn, FnsToEvaluate, GeneralEqmEqns, Params, DiscountFactorParamNames, [], [], [], GEPriceParamNames,heteroagentoptions, simoptions, vfoptions);
+% 
+% p_eqm_final % The equilibrium values of the GE prices
+% % Note: GeneralEqmCondn_final will be essentially zero, it is the value of the general equilibrium equation
+% 
+% % For the transition path we will need the final value function
+% Params.r=p_eqm_final.r;
+% [V_final,Policy_final]=ValueFnIter_Case1(n_d,n_a,n_z,d_grid,a_grid,z_grid, pi_z, ReturnFn,Params, DiscountFactorParamNames,[],vfoptions);
+% 
+% StationaryDist_final=StationaryDist_Case1(Policy_final,n_d,n_a,n_z,pi_z);
+% AggVars_final=EvalFnOnAgentDist_AggVars_Case1(StationaryDist_final, Policy_final, FnsToEvaluate, Params, [], n_d, n_a, n_z, d_grid, a_grid, z_grid,simoptions);
+% 
+% % surf(k_grid*ones(1,n_s),ones(n_a,1)*s_grid',V_final)
+% 
+% %% Compute the transition path
+% % For this we need the following extra objects: PricePathOld, PriceParamNames, ParamPath, ParamPathNames, T, V_final, StationaryDist_init
+% % (already calculated V_final & StationaryDist_init above)
+% 
+% % Number of time periods to allow for the transition (if you set T too low
+% % it will cause problems, too high just means run-time will be longer).
+% T=150
+% 
+% % We want to look at a one off unanticipated change of beta. ParamPath & PathParamNames are thus given by
+% ParamPath.alpha=0.4*ones(T,1); % For each parameter that changes value, ParamPath is matrix of size T-by-1
+% % (the way ParamPath is set is designed to allow for a series of changes in the parameters)
+% 
+% % We need to give an initial guess for the price path on interest rates
+% % (this is deliberately not a good guess, so you can see that the transition path can be found)
+% PricePath0.r=[linspace(p_eqm_init.r, p_eqm_final.r, floor(T/2))'; p_eqm_final.r*ones(T-floor(T/2),1)]; % For each price, PricePath0 is matrix of size T-by-1
+% 
+% % General equilibrium conditions (for the transition path)
+% TransPathGeneralEqmEqns.CapitalMarket = @(r,K,alpha,delta,Expectation_l) r-(alpha*(K^(alpha-1))*(Expectation_l^(1-alpha))-delta);
+% % Note: For this model the transition path has the same general equilibrium conditions as the stationary equilibrium, but this will not always be true for more complex models.
+% 
+% transpathoptions.GEnewprice=3;
+% % Need to explain to transpathoptions how to use the GeneralEqmEqns to
+% % update the general eqm transition prices (in PricePath).
+% transpathoptions.GEnewprice3.howtoupdate=... % a row is: GEcondn, price, add, factor
+%     {'CaptialMarket','r',0,0.1}; % CaptialMarket GE condition will be positive if r is too big, so subtract
+% % Note: the update is essentially new_price=price+factor*add*GEcondn_value-factor*(1-add)*GEcondn_value
+% % Notice that this adds factor*GEcondn_value when add=1 and subtracts it what add=0
+% % A small 'factor' will make the convergence to solution take longer, but too large a value will make it 
+% % unstable (fail to converge). Technically this is the damping factor in a shooting algorithm.
+% 
+% 
+% % Now just run the TransitionPath_Case1 command (all of the other inputs
+% % are things we had already had to define to be able to solve for the
+% % initial and final equilibria)
+% transpathoptions.weightscheme=1;
+% transpathoptions.verbose=1;
+% 
+% PricePath=TransitionPath_Case1(PricePath0, ParamPath, T, V_final, StationaryDist_init, n_d, n_a, n_z, pi_z, d_grid,a_grid,z_grid, ReturnFn, FnsToEvaluate, TransPathGeneralEqmEqns, Params, DiscountFactorParamNames, transpathoptions);
+% 
+% figure(1)
+% plot(0:1:T, [p_eqm_init.r;PricePath.r])
+% title('interest rate path for transtion')
+% 
+% %% Look at results
+% [VPath,PolicyPath]=ValueFnOnTransPath_Case1(PricePath, ParamPath, T, V_final, Policy_final, Params, n_d, n_a, n_z, pi_z, d_grid, a_grid,z_grid, DiscountFactorParamNames, ReturnFn, transpathoptions, vfoptions);
+% 
+% AgentDistPath=AgentDistOnTransPath_Case1(StationaryDist_init, PolicyPath,n_d,n_a,n_z,pi_z,T,simoptions);
+% 
+% AggVarsPath=EvalFnOnTransPath_AggVars_Case1(FnsToEvaluate,AgentDistPath,PolicyPath,PricePath,ParamPath, Params, T, n_d, n_a, n_z, pi_z, d_grid, a_grid,z_grid,simoptions);
+% 
+% figure(2)
+% plot(0:1:T, [AggVars_init.K.Mean, AggVarsPath.K.Mean])
+% title('path of aggregate physical capital for transtion')
+% 
+% 
