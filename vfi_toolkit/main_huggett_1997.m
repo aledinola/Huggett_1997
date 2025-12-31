@@ -4,8 +4,10 @@ clear,clc,close all
 toolkit_path = 'C:\Users\aledi\Documents\GitHub\VFIToolkit-matlab';
 addpath(genpath(toolkit_path))
 
+FigDir = 'figures';
+
 %% Grid sizes
-n_a = 1000;
+n_a = 2000;
 n_z = 2;
 
 %% Parameters
@@ -25,7 +27,8 @@ vfoptions=struct();
 vfoptions.lowmemory     = 0;
 vfoptions.verbose       = 0;
 vfoptions.tolerance     = 1e-9; % default: 10^(-9)
-vfoptions.howards       = 150; % default: 150
+vfoptions.maxiter       = 1000; % default: Inf
+vfoptions.howards       = 50; % default: 150
 vfoptions.maxhowards    = 500; %default: 500
 vfoptions.howardsgreedy = 0;
 vfoptions.gridinterplayer  = 0;
@@ -36,16 +39,17 @@ vfoptions.divideandconquer = 0;
 
 % Distribution options
 simoptions=struct(); % Use default options for solving for stationary distribution
-simoptions.tolerance       = 1e-8;
+simoptions.tolerance       = 1e-9;
+simoptions.maxit           = 10000;
 simoptions.gridinterplayer = vfoptions.gridinterplayer;
 simoptions.ngridinterp     = vfoptions.ngridinterp;
 
 % Heteroagentoptions
 heteroagentoptions = struct();
 heteroagentoptions.verbose=1; % verbose means that you want it to give you feedback on what is going on
-heteroagentoptions.fminalgo = 1;  % 0=fzero, 1=fminsearch, 8=lsqnonlin 
-heteroagentoptions.toleranceGEprices=1e-4; % default is 1e-4
-heteroagentoptions.toleranceGEcondns=1e-4; % default is 1e-4
+heteroagentoptions.toleranceGEprices=1e-6; % default is 1e-4
+heteroagentoptions.toleranceGEcondns=1e-6; % default is 1e-4
+heteroagentoptions.fminalgo = 0;  % 0=fzero, 1=fminsearch, 8=lsqnonlin 
 heteroagentoptions.maxiter = 1000;
 
 % Transition
@@ -81,6 +85,7 @@ Params.K = 4.31; % Initial condition for GE capital
 
 % Create functions to be evaluated
 FnsToEvaluate.A = @(aprime,a,z) a;
+FnsToEvaluate.C = @(aprime,a,z,K,alpha,delta) f_consumption(aprime,a,z,K,alpha,delta);
 
 % Now define the functions for the General Equilibrium conditions
 GeneralEqmEqns.CapitalMarket = @(K,A) K-A; 
@@ -97,7 +102,9 @@ fprintf('Grid sizes are: %d points for assets, and %d points for exogenous shock
 % Solve for the stationary general equilbirium
 
 fprintf('Calculating price vector corresponding to the stationary general eqm \n')
+tic
 [p_eqm_final,~,GeneralEqmCondn_final]=HeteroAgentStationaryEqm_Case1(n_d, n_a, n_z, 0, pi_z, d_grid, a_grid, z_grid, ReturnFn, FnsToEvaluate, GeneralEqmEqns, Params, DiscountFactorParamNames, [], [], [], GEPriceParamNames,heteroagentoptions, simoptions, vfoptions);
+time_ge=toc;
 
 disp(p_eqm_final) % The equilibrium values of the GE prices
 % Note: GeneralEqmCondn_init will be essentially zero, it is the value of the general equilibrium equation
@@ -113,22 +120,63 @@ pol_aprime = reshape(PolicyValues_final,[n_a,n_z]);
 
 StationaryDist_final=StationaryDist_Case1(Policy_final,n_d,n_a,n_z,pi_z,simoptions);
 
-% Compute aggregate variables
-FnsToEvaluate.C = @(aprime,a,z,K,alpha,delta) f_consumption(aprime,a,z,K,alpha,delta);
+% Following line is just a check
 AggVars_final=EvalFnOnAgentDist_AggVars_Case1(StationaryDist_final, Policy_final, FnsToEvaluate, Params, [], n_d, n_a, n_z, d_grid, a_grid, z_grid,simoptions);
 
 % Check GE residual
 err_GE      = GeneralEqmEqns.CapitalMarket(Params.K,AggVars_final.A.Mean);
-[~,~,Y_agg] = f_prices(Params.K,Params.alpha,Params.delta);
+[r,w,Y_agg] = f_prices(Params.K,Params.alpha,Params.delta);
 err_walras  = Y_agg - (AggVars_final.C.Mean + Params.delta*Params.K);
 
-disp('RESULTS STEADY STATE')
-% Huggett writes that ss K is 4.3242
-fprintf('CapitalMarket residual: %f \n',err_GE)
-fprintf('Goods market residual:  %f \n',err_walras)
-fprintf('Aggregate capital:      %f \n',p_eqm_final.K)
+% Open text file for writing
+fid = fopen('results_huggett_1997_toolkit.txt','w');
 
-% Replication of Figure 2 JME paper
+% Display + write header
+disp('RESULTS FINAL STEADY STATE, VFI TOOLKIT')
+fprintf(fid,'RESULTS FINAL STEADY STATE, VFI TOOLKIT\n');
+
+% Huggett writes that ss K is 4.3242
+fprintf('No. grid points assets: %d \n',n_a);
+fprintf(fid,'No. grid points assets: %d \n',n_a);
+
+fprintf('CapitalMarket residual: %f \n',err_GE);
+fprintf(fid,'CapitalMarket residual: %f \n',err_GE);
+
+fprintf('Goods market residual:  %f \n',err_walras);
+fprintf(fid,'Goods market residual:  %f \n',err_walras);
+
+fprintf('Aggregate capital:      %f \n',p_eqm_final.K);
+fprintf(fid,'Aggregate capital:      %f \n',p_eqm_final.K);
+
+fprintf('Capital-to-labor ratio:  %f \n',p_eqm_final.K/z_mean);
+fprintf(fid,'Capital-to-labor ratio:  %f \n',p_eqm_final.K/z_mean);
+
+fprintf('Capital-to-output ratio: %f \n',p_eqm_final.K/Y_agg);
+fprintf(fid,'Capital-to-output ratio: %f \n',p_eqm_final.K/Y_agg);
+
+fprintf('Consumption:             %f \n',AggVars_final.C.Mean);
+fprintf(fid,'Consumption:             %f \n',AggVars_final.C.Mean);
+
+fprintf('Interest rate:           %f \n',r);
+fprintf(fid,'Interest rate:           %f \n',r);
+
+fprintf('Wage:                    %f \n',w);
+fprintf(fid,'Wage:                    %f \n',w);
+
+fprintf('Run time General Equil: %f \n',time_ge);
+fprintf(fid,'Run time General Equil: %f \n',time_ge);
+
+% Close the file
+fclose(fid);
+
+% Plot stationary distribution
+figure
+plot(a_grid,sum(StationaryDist_final,2))
+xlabel('Assets')
+title('Distribution of assets in steady state')
+print(fullfile(FigDir,'stadist.png'),'-dpng')
+
+% Replicate Figure 2 of Huggett JME paper
 a_cut = find(a_grid>10, 1 );
 figure
 plot(a_grid(1:a_cut),pol_aprime(1:a_cut,1),':','linewidth',2)
@@ -141,6 +189,7 @@ xlabel('CAPITAL')
 ylabel('CAPITAL NEXT PERIOD')
 title('OPTIMAL DECISION RULE')
 axis tight
+print(fullfile(FigDir,'fig2_huggett.png'),'-dpng')
 
 %% Define initial distribution
 % Huggett: The initial distribution puts 20% of the agents exactly at

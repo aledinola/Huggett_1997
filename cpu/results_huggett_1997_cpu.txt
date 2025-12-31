@@ -1,0 +1,11 @@
+FINAL STEADY-STATE, OWN CPU CODE: 
+No. grid points assets: 2000 
+CapitalMarket residual: 0.001356 
+Goods market residual:  0.000052 
+Capital stock:           4.311645 
+Capital-to-labor ratio:  4.311645 
+Capital-to-output ratio: 2.547836 
+Consumption:             1.261061 
+Interest rate:           0.041296 
+Wage:                    1.083057 
+Run time General Equil: 6.970329 
