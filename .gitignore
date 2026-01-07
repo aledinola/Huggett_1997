@@ -1,0 +1,15 @@
+# Ignore all PDF files
+*.pdf
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.synctex.gz
+*.blg
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+# matlab auxiliary files 
+*.asv
