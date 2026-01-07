@@ -1,11 +1,11 @@
 RESULTS FINAL STEADY STATE, VFI TOOLKIT
 No. of asset grid points: 2000
-CapitalMarket residual: 0.000043
-Goods market residual:  0.000002
-Aggregate capital:      4.311639
-Capital-to-labor ratio:  4.311639
-Capital-to-output ratio: 2.547834
-Consumption:             1.261110
-Interest rate:           0.041296
-Wage:                    1.083057
-Run time GE:             11.566510
+CapitalMarket residual: -0.000818
+Goods market residual:  -0.000034
+Aggregate capital:      4.309945
+Capital-to-labor ratio:  4.309945
+Capital-to-output ratio: 2.547193
+Consumption:             1.261076
+Interest rate:           0.041332
+Wage:                    1.082904
+Run time GE:             5.075298

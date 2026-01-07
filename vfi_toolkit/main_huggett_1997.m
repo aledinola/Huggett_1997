@@ -48,7 +48,7 @@ vfoptions.maxiter             = 1000;   % default: Inf
 vfoptions.howards             = 50;     % default: 150
 vfoptions.maxhowards          = 500;    % default: 500
 vfoptions.howardsgreedy       = 0;
-vfoptions.gridinterplayer     = 1;
+vfoptions.gridinterplayer     = 0;
 vfoptions.ngridinterp         = 20;
 vfoptions.divideandconquer    = 0;
 % vfoptions.level1n           = 51; % default: 51 if one a variable, 21 if two
@@ -99,7 +99,9 @@ K_ss = ((r_ss + Params.delta) / Params.alpha)^(1 / (Params.alpha - 1));
 % Asset grid
 a_min  = 0;
 a_max  = 10 * K_ss;
-a_grid = a_min + (a_max - a_min) * (linspace(0, 1, n_a)'.^3);
+%a_grid = a_min + (a_max - a_min) * (linspace(0, 1, n_a)'.^3);
+a_grid = [linspace(0,10.8104,floor(n_a/2)),linspace(10.8104,a_max,n_a-floor(n_a/2)+1)]';
+a_grid = unique(a_grid); % eliminate the double value at 10.8104
 
 % No d-variable in this model
 d_grid = 0;
