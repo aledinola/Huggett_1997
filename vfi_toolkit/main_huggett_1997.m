@@ -48,8 +48,8 @@ vfoptions.maxiter             = 1000;   % default: Inf
 vfoptions.howards             = 50;     % default: 150
 vfoptions.maxhowards          = 500;    % default: 500
 vfoptions.howardsgreedy       = 0;
-vfoptions.gridinterplayer     = 0;
-vfoptions.ngridinterp         = 30;
+vfoptions.gridinterplayer     = 1;
+vfoptions.ngridinterp         = 20;
 vfoptions.divideandconquer    = 0;
 % vfoptions.level1n           = 51; % default: 51 if one a variable, 21 if two
 
