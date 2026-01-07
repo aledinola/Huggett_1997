@@ -11,7 +11,7 @@
 clear; clc; close all;
 
 %% Paths and output folders
-do_transition = 0; % Set equal to 1 if want to run transition 
+do_transition = 1; % Set equal to 1 if want to run transition 
 toolkit_path  = 'C:\Users\aledi\Documents\GitHub\VFIToolkit-matlab';
 addpath(genpath(toolkit_path));
 
