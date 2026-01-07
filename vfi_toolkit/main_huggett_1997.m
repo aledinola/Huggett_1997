@@ -4,15 +4,15 @@
 % 
 % This script uses the VFI Toolkit to:
 %   1. Solve for the stationary general equilibrium of the Huggett (1997) model.
-%   2. Construct an initial cross-sectional distribution of assets à la Huggett.
+%   2. Construct an initial cross-sectional distribution.
 %   3. Compute a general equilibrium transition path for aggregate capital.
 %   4. Produce a few diagnostic plots.
 
 clear; clc; close all;
 
 %% Paths and output folders
-
-toolkit_path = 'C:\Users\aledi\Documents\GitHub\VFIToolkit-matlab';
+do_transition = 0; % Set equal to 1 if want to run transition 
+toolkit_path  = 'C:\Users\aledi\Documents\GitHub\VFIToolkit-matlab';
 addpath(genpath(toolkit_path));
 
 FigDir = 'figures';
@@ -22,7 +22,7 @@ end
 
 %% Grid sizes
 
-n_a = 2500;  % number of asset grid points
+n_a = 2000;  % number of asset grid points
 n_z = 2;     % number of idiosyncratic productivity states
 
 %% Parameters
@@ -118,8 +118,6 @@ Params.K          = 4.31;  % initial guess for aggregate capital in GE
 
 % Functions to evaluate on the cross-sectional distribution
 FnsToEvaluate.A = @(aprime, a, z) a;
-FnsToEvaluate.C = @(aprime, a, z, K, alpha, delta) ...
-    f_consumption(aprime, a, z, K, alpha, delta);
 
 % General equilibrium condition (capital market clearing)
 GeneralEqmEqns.CapitalMarket = @(K, A) K - A;
@@ -151,6 +149,13 @@ Params.K = p_eqm_final.K;
 % Policy functions in levels
 PolicyValues_final = PolicyInd2Val_Case1(Policy_final, n_d, n_a, n_z, d_grid, a_grid, vfoptions);
 pol_aprime         = reshape(PolicyValues_final, [n_a, n_z]);
+
+FnsToEvaluate.C = @(aprime, a, z, K, alpha, delta) ...
+    f_consumption(aprime, a, z, K, alpha, delta);
+
+ValuesOnGrid=EvalFnOnAgentDist_ValuesOnGrid_Case1(Policy_final,FnsToEvaluate,Params,...
+    [],n_d, n_a, n_z, d_grid, a_grid, z_grid, simoptions);
+pol_cons = ValuesOnGrid.C;
 
 % Stationary distribution at the final steady state
 StationaryDist_final = StationaryDist_Case1(Policy_final, n_d, n_a, n_z, pi_z, simoptions);
@@ -205,7 +210,7 @@ fprintf(fid, 'Run time GE:             %f\n', time_ge);
 fclose(fid);
 
 %% Define initial distribution via cutoff on asset grid
-% Huggett-style initialization:
+% Huggett (1997) initialization:
 %   - 20% of agents are exactly at zero assets (a = 0).
 %   - The remaining 80% are spread uniformly across the asset grid up to a
 %     cutoff c.
@@ -267,7 +272,7 @@ for it = 1:maxiter
 end % end bisection iterations
 
 %% Compute transition path
-
+if do_transition == 1
 disp('Start transition computation...');
 
 % V_final: value function in the final steady state
@@ -311,6 +316,8 @@ xlabel('Time periods');
 ylabel('Capital');
 print(fullfile(FigDir1, 'Kt_tran.png'), '-dpng');
 
+end %end do transition
+
 % Stationary distribution of assets
 figure;
 plot(a_grid, sum(StationaryDist_final, 2), 'LineWidth', 1.5);
@@ -333,7 +340,7 @@ title('Optimal decision rule for capital');
 axis tight;
 print(fullfile(FigDir1, 'fig2_huggett.png'), '-dpng');
 
-% Policy for consumption (requires pol_cons to be available in workspace)
+% Policy for consumption 
 figure;
 plot(a_grid(1:a_cut), pol_cons(1:a_cut,1), ':',  'LineWidth', 2); hold on;
 plot(a_grid(1:a_cut), pol_cons(1:a_cut,2), '-.', 'LineWidth', 2);
